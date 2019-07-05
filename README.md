@@ -81,6 +81,7 @@ cd /go-ethereum
 make geth
 cp ./build/bin/geth /usr/local/bin/geth
 ```
+You can add another bash console to the container using the command `docker exec -it $docker_container_id bash`. 
 GETH installation would have to be done in each container separately as building geth in the dockerfile itself returns an error in `make geth` command saying `go not found`.
 
 **Setting up a local Ethereum Network**
@@ -96,6 +97,14 @@ docker run --rm -it -p 8546:8546 --net=ETH node
 
 As the entrypoint is set to bash, `docker run` commands need to be run from separate cmd line tabs as it opens the container in command line.
 Run `make geth` and `cp ./build/bin/geth /usr/local/bin/geth` in both containers to install geth.
+
+Since mining can not be done on light node, we will initiallize ether to each node through `genesis.json`. The account address of the node would be added to the genesis block and ether alloted to each account.
+
+Create new account on geth using `geth account new` on both nodes. Save the address to the key file ( `~/.ethereum/keystore/UTC...298`) and the public address created.
+![](./docs/images/local_account.png)
+
+Modify `genesis.json` to include the created accounts and add ether to them in `alloc: {}`
+![](./docs/images/genesis.png)
 
 Now, run geth on first node 
 Make new directory to be used as data directory for geth, copy `genesis.json` file cloned from the repository to it and run geth using this genesis file and data directory. Enter the port and netowrkid and attach console to the geth instance.
@@ -119,6 +128,8 @@ mkdir node_two
 geth --datadir "/ethereum/node_two" --networkid "500" --rpc --rpcport=8546 --rpcaddr 0.0.0.0 init "/ethereum/genesis.json"
 geth --datadir "/ethereum/node_two" console 2>console.log
 ```
+Check balance using `eth.getBalance(eth.accounts[0])`
+![](./docs/images/balance.png)
 
 We are now running ethereum on both nodes but the nodes are not able to detect on another. We have add them as peers to create a network.
 
@@ -231,20 +242,10 @@ The following graph shows memory usage by container over the entire sync. The da
 
 ![](./docs/images/sync_cache_graph.PNG)
 
-Free cache available for use can be seen using `free -h`. The following graph shows free cache memory over the sync.
-
-![](./docs/images/sync_docker_graph.PNG)
-
-
-
 As mentioned earlier the account creation function `personal.newAccount()` is computationally heavy as can be seen from the graph
  of memory usage by container during account creation after sync is finished. The datapoints are taken as earlier but at 1 sec interval.
  
 ![](./docs/images/account_cache_graph.PNG)
-
-And free cache memory:
-
-![](./docs/images/account_docker_graph.PNG)
 
 As can be seen from the graph, after syncing the node, about 600 mb of cache memory is available while running the account creation function
  leaves only 40 mb of cache. Moreover even after account creation, memory is not freed and only about 80 mb is available unless the node is stopped and started again.
@@ -258,3 +259,93 @@ Installation of go on the container through dockerfile shows errors while buildi
 
 Error while mining on testnet as well as private node - Unresolved. The underlying miner functions might be incompatible with the arm processor.
 
+**Running Ethereum Client without running Node**
+
+Ethereum accounts can be managed and transactions submitted without running a node, althoug the external party has to be trusted to publish transactions on your account. 
+Infura provides access to Ethreum as API and developer tools. Infura will act as our server while using sbt-ethereum as our client.
+
+Create account on https:[](https://infura.io) and create a new project to get unique handle to mainnet and various testnets such as `ropsten.infura.io/v3/faa826b1e6ee4220ac1e97c3e2757830`.
+
+Install sbt-ethereum
+```
+sudo apt-get install -y openjdk-8-jdk
+
+git clone https://github.com/swaldman/eth-command-line.git
+cd eth-command-line
+chmod +x ./sbtw
+./sbtw
+```
+Create new wallet `ethKeystoreWalletV3Create`
+
+![](./docs/images/create_account.png)
+
+List created accounts `ethKeystoreList` and set account as default-sender `ethAddressSenderDefaultSet <account_address>`. `sbt-ethereum` always uses default-sender to do transactions, 
+therefore `default-sender` has to be updated before transacting. Alias name can be set to a account using `ethAddressAliasSet <alias-name> <account-address>`
+
+![](./docs/images/keystore_list.png)
+![](./docs/images/set_default.png)
+![](./docs/images/set_alias.png)
+
+Connect to infura using the unique handle `ethNodeUrlDefaultSet https://ropsten.infura.io/v3/faa826b1e6ee4220ac1e97c3e2757830` and check connection `ethNodeBlockNumberPrint`
+
+![](./docs/images/set_url.png)
+
+The default chainid for the client is 1. Set the chainid to that corresponding to the ethereum network being used.
+Mainnet = 1, Ropsten = 3, Rinkeby = 4 `ethNodeChainIdDefaultSet <chain-id>`
+
+![](./docs/images/set_chainid.png)
+
+Add ether to default-sender using ropsten faucet and check balance`ethAddressBalance default-sender`
+To send transactions `ethTransactionEtherSend <to_account_address> 0.01 ether`
+
+![](./docs/images/sbt_transaction.png)
+
+Memory usage while running the sbt client is shown in the following graph
+
+![](./docs/images/sbt_graph.PNG)
+
+Clearly, the memory usage is substantially lower than the geth client as it does not need to run a node and sync to the network. Running the console requires about 330 mb, sending a transaction 450 mb while 
+account creation occupies upto 630 mb. The memory stays occupied even after operation and 660 mb is occupied at max.
+
+**Integrating iot 2040 with Hyperledger**
+
+Setup up the iot 2040 device by expanding the file system on the sd card after formatting it.
+*  tuts - https://fitgeekgirl.com/2017/03/19/setting-up-the-simatic-iot2040/
+*  video - https://www.youtube.com/watch?v=e7Q1Sk9Dk4A
+
+Now, configure architecture parameters to provide data sources for installing required packages. Add the following to `/etc/opkg/arch.conf` file (might already be present in recent versions)
+```
+arch i586 36
+arch quark 31
+arch x86 41
+```
+Add repository sources creating a new file `/etc/opkg/iotdk.conf` containing
+```
+src iotdk-all http://iotdk.intel.com/repos/2.0/iotdk/all
+src iotdk-i586 http://iotdk.intel.com/repos/2.0/iotdk/i586
+src iotdk-quark http://iotdk.intel.com/repos/2.0/iotdk/quark
+src iotdk-x86 http://iotdk.intel.com/repos/2.0/iotdk/x86
+```
+The quark processor present in iot 2040 is compatible with package library create by intel, so will use them as a source to install our packages. Run `opkg update` to update list of sources.
+
+Now, install nodejs and sshd (sshd breaks on installing nodejs which can be fixed by reinstalling it)
+```
+opkg install nodejs
+opkg install sshd
+```
+Now install node-red using npm
+```
+npm install -g --unsafe-perm node-red
+```
+Add hyperledger packages to the node-red node
+```
+cd /home/root/.node-red/
+npm install node-red-contrib-hyperledger-composer
+npm install node-red-contrib-fs
+```
+Run node using `node-red` and open browser to run Node-Red UI on the ip-address of iot device (the ip on which you are using ssh) and port 1880 eg. `192.168.1.20:1880`
+
+`hyperledger` is available on the bottom of left-hand side panel while `fs file lister` is present in the storage section of the panel. Create the required flow by dragging the required 
+node to the screen.
+
+Connect network on hyperledger fabric using the pencil icon and creating a composer card and run transactions.
