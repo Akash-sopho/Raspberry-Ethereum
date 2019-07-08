@@ -332,6 +332,7 @@ Now, install nodejs and sshd (sshd breaks on installing nodejs which can be fixe
 ```
 opkg install nodejs
 opkg install sshd
+npm install -g --unsafe-perm node-red
 ```
 Now install node-red using npm
 ```
@@ -345,7 +346,6 @@ npm install node-red-contrib-fs
 ```
 Run node using `node-red` and open browser to run Node-Red UI on the ip-address of iot device (the ip on which you are using ssh) and port 1880 eg. `192.168.1.20:1880`
 
-`hyperledger` is available on the bottom of left-hand side panel while `fs file lister` is present in the storage section of the panel. Create the required flow by dragging the required 
-node to the screen.
+`hyperledger` is available on the bottom of left-hand side panel while `fs file lister` is present in the storage section of the panel. Create the required flow by dragging the required node to the screen.
 
 Connect network on hyperledger fabric using the pencil icon and creating a composer card and run transactions.
